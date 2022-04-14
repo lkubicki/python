@@ -1,6 +1,8 @@
 from time import *
 from requests import *
 
+CZAS_OCZEKIWANIA = 1
+
 START_URL = "http://3am.pl/ships/start.php"
 SEND_SHOOT_URL = "http://3am.pl/ships/shoot.php"
 SEND_RESULT_URL = "http://3am.pl/ships/shootresult.php"
@@ -117,7 +119,6 @@ def czy_prawidlowa_pozycja_statku(liczba_masztow, koordynaty):
         return czy_prawidlowa_pozycja_statku_poziomo(wiersz, kolumna, liczba_masztow)
     else:
         return False
-    return True
 
 
 def ustaw_statek(liczba_masztow, koordynaty):
@@ -146,10 +147,10 @@ def wyswietl_plansze():
 
     for y in range(10):
         wiersz = ''
-        for plansza in range(2):
+        for ktora_plansza in range(2):
             wiersz += chr(ord('A') + y) + ' '
             for x in range(10):
-                zawartosc = podaj_zawartosc_planszy(y, x, plansza)
+                zawartosc = podaj_zawartosc_planszy(y, x, ktora_plansza)
                 if zawartosc not in ' ' + TRAFIONY + PUDLO + DZIURA + PLONIE:
                     wiersz += '#'
                 else:
@@ -157,7 +158,6 @@ def wyswietl_plansze():
                 wiersz += '|'
             wiersz += '    '
         print(wiersz)
-        wiersz = ''
 
 
 def ustaw_statki():
@@ -216,7 +216,7 @@ def podaj_polozenie_statku(koordynaty, dane_statku):
         liczba_masztow = dane_statku // 10
         poczatkowa_kolumna = kolumna - aktualny_maszt
         koncowa_kolumna = poczatkowa_kolumna + liczba_masztow
-        return wiersz + str(poczatkowa_kolumna) + '-' + wiersz + str(koncowa_kolumna)
+        return chr(ord('A') + wiersz) + str(poczatkowa_kolumna) + '-' + chr(ord('A') + wiersz) + str(koncowa_kolumna)
 
 
 def oznacz_jako_zatopiony(koordynaty, dane_statku):
@@ -238,39 +238,34 @@ def oznacz_jako_zatopiony(koordynaty, dane_statku):
 
 
 def sprawdz_strzal(koordynaty):
-    # while czy_prawidlowy_strzal(koordynaty):
-    #     print('Nieprawidlowy strzal. Sprobuj jeszcze raz: ')
     wiersz, kolumna = podaj_pozycje(koordynaty)
     if czy_trafiony(koordynaty):
         dane_statku = ord(podaj_zawartosc_planszy(wiersz, kolumna, STATKI))
         print(f'TRAFIONY {dane_statku}')
         ustaw_zawartosc_planszy(wiersz, kolumna, STRZALY, PLONIE, True)
-        ustaw_zawartosc_planszy(wiersz, kolumna, STATKI, PLONIE, True)
         if czy_zatopiony(koordynaty, dane_statku):
             oznacz_jako_zatopiony(koordynaty, dane_statku)
             return 'SUNK', podaj_polozenie_statku(koordynaty, dane_statku)
         return 'HIT', koordynaty
     else:
         ustaw_zawartosc_planszy(wiersz, kolumna, STRZALY, PUDLO)
-        ustaw_zawartosc_planszy(wiersz, kolumna, STATKI, PUDLO)
-        print(f'{int(time_ns() / 100)} PUDLO')
+        # print(f'{int(time_ns() / 100)} PUDLO')
         return 'MISS', koordynaty
-    # return podaj_zawartosc_planszy(wiersz, kolumna, STRZALY)
 
 
-def oznacz_strzal(koordynaty, rezultat):
+def oznacz_strzal(koordynaty, rezultat, ktora_plansza):
     wiersz, kolumna = podaj_pozycje(koordynaty)
     if rezultat == 'HIT':
         print(f'{koordynaty} TRAFIONY')
-        ustaw_zawartosc_planszy(wiersz, kolumna, STRZALY, PLONIE, True)
+        ustaw_zawartosc_planszy(wiersz, kolumna, ktora_plansza, PLONIE, True)
     elif rezultat == 'SUNK':
         print(f'{koordynaty} ZATOPIONY')
-        #todo: oznaczyc na planszy po koordynatach, gdzie zatopiono statek (oraz pola dookoła)
-        ustaw_zawartosc_planszy(wiersz, kolumna, STRZALY, PLONIE, True)
+        # todo: oznaczyc na planszy po koordynatach, gdzie zatopiono statek (oraz pola dookoła)
+        ustaw_zawartosc_planszy(wiersz, kolumna, ktora_plansza, PLONIE, True)
     else:
-        ustaw_zawartosc_planszy(wiersz, kolumna, STRZALY, PUDLO)
+        ustaw_zawartosc_planszy(wiersz, kolumna, ktora_plansza, PUDLO)
         print(f'{koordynaty} PUDLO')
-    return podaj_zawartosc_planszy(wiersz, kolumna, STRZALY)
+    return podaj_zawartosc_planszy(wiersz, kolumna, ktora_plansza)
 
 
 def nowa_gra():
@@ -296,7 +291,7 @@ def dolacz(idgry):
         odpowiedz = get(GET_LAST_ACTION_URL, params={'gameId': idgry}).text
         if odpowiedz == 'FAIL':
             print(f'{int(time_ns() / 100)} - nie dołączono do gry: {idgry}, odpowiedź: {odpowiedz}')
-            sleep(3)
+            sleep(CZAS_OCZEKIWANIA)
     identyfikator_gry = idgry
     print(f'{int(time_ns() / 100)} - dołączono do gry: {identyfikator_gry}')
 
@@ -310,44 +305,50 @@ def oddaj_strzal():
     strzel(koordynaty, nazwa)
 
 
-def strzel(koordynaty, nazwa_gracza):
+def strzel(koordynaty, ktory_gracz):
     global identyfikator_gry
-    post(SEND_SHOOT_URL, data={'gameId': identyfikator_gry, 'player': nazwa_gracza, 'target': koordynaty})
+    post(SEND_SHOOT_URL, data={'gameId': identyfikator_gry, 'player': ktory_gracz, 'target': koordynaty})
 
 
 def pobierz_dane():
     global identyfikator_gry
     dane = ''
-    nazwa_gracza = nazwa
+    ktory_gracz = nazwa
     akcja = ''
-    while nazwa_gracza == nazwa:
+    while ktory_gracz == nazwa:
         odpowiedz = get(GET_LAST_ACTION_URL, params={'gameId': identyfikator_gry})
         if odpowiedz.text != '':
-            czas, akcja, nazwa_gracza, dane = odpowiedz.text.split(',')
-        sleep(3)
+            czas, akcja, ktory_gracz, dane = odpowiedz.text.split(',')
+        sleep(CZAS_OCZEKIWANIA)
     return akcja, dane
 
 
 def wyslij_odpowiedz(akcja, koordynaty):
     global identyfikator_gry
-    global nazwa_gracza
-    post(SEND_RESULT_URL, data={'gameId': identyfikator_gry, 'player': nazwa_gracza, 'result': akcja, 'corrdinates': koordynaty})
+    global nazwa
+    odpowiedz = post(SEND_RESULT_URL, data={'gameId': identyfikator_gry, 'player': nazwa, 'result': akcja, 'coordinates': koordynaty})
+    if odpowiedz.text != 'OK':
+        print (f'coś poszło źle')
 
 
 def gra():
     global czyja_kolej
     while True:
         if gracze[czyja_kolej] == nazwa:
-            oddaj_strzal()
-            akcja, dane = pobierz_dane()
-            oznacz_strzal(dane, akcja)
+            akcja = 'HIT'
+            while akcja in ['HIT', 'SUNK']:
+                oddaj_strzal()
+                akcja, dane = pobierz_dane()
+                oznacz_strzal(dane, akcja, STRZALY)
             czyja_kolej = (czyja_kolej + 1) % 2
         else:
             akcja, dane = pobierz_dane()
-            oznacz_strzal(dane, akcja)
+            oznacz_strzal(dane, akcja, STATKI)
             akcja, koordynaty = sprawdz_strzal(dane)
             wyslij_odpowiedz(akcja, koordynaty)
-            czyja_kolej = (czyja_kolej + 1) % 2
+            if akcja == 'MISS':
+                czyja_kolej = (czyja_kolej + 1) % 2
+        print(f'{gracze[czyja_kolej]}')
 
 
 def start_gry():
